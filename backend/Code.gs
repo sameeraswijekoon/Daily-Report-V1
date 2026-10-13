@@ -65,6 +65,30 @@ function iso_(v) {
   return String(v == null ? '' : v);
 }
 
+function pad_(n) { return (n < 10 ? '0' : '') + n; }
+
+// Sheets auto-converts date-like strings ("2026-10-13") into real Date values
+// on write; normalize back to YYYY-MM-DD so filtering and display work.
+function dateStr_(v) {
+  if (v instanceof Date) {
+    return v.getFullYear() + '-' + pad_(v.getMonth() + 1) + '-' + pad_(v.getDate());
+  }
+  var s = String(v == null ? '' : v).trim();
+  var m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : s;
+}
+
+// Same for time cells: Sheets stores "22:10" as a Date; normalize back to HH:MM.
+function timeStr_(v) {
+  if (v instanceof Date) {
+    return pad_(v.getHours()) + ':' + pad_(v.getMinutes());
+  }
+  var s = String(v == null ? '' : v).trim();
+  var m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) return pad_(Number(m[1])) + ':' + m[2];
+  return s;
+}
+
 function isActive_(u) {
   return u.Active === true || String(u.Active).toUpperCase() === 'TRUE';
 }
@@ -183,7 +207,9 @@ function saveReport_(body, user) {
   }
   getSheet_(SHEET_REPORTS, REPORT_HEADERS).appendRow([
     new Date().toISOString(), user.Username, r.date, r.customerName,
-    r.contactNumber, r.city, r.reasonToVisit, r.remark, r.timeStart, r.timeEnd
+    // Leading apostrophe forces text storage so contact numbers keep leading zeros (e.g. 077...).
+    r.contactNumber ? "'" + r.contactNumber : '',
+    r.city, r.reasonToVisit, r.remark, r.timeStart, r.timeEnd
   ]);
   return out_({ ok: true });
 }
@@ -202,7 +228,7 @@ function listReports_(body, user) {
     if (scope !== 'all' || user.Role !== 'admin') {
       if (uname.toLowerCase() !== me) continue;
     }
-    var d = String(r.Date || '');
+    var d = dateStr_(r.Date);
     if (from && d < from) continue;
     if (to && d > to) continue;
     out.push({
@@ -215,8 +241,8 @@ function listReports_(body, user) {
       city: String(r.City || ''),
       reasonToVisit: String(r.ReasonToVisit || ''),
       remark: String(r.Remark || ''),
-      timeStart: String(r.TimeStart || ''),
-      timeEnd: String(r.TimeEnd || '')
+      timeStart: timeStr_(r.TimeStart),
+      timeEnd: timeStr_(r.TimeEnd)
     });
   }
   out.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });

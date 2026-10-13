@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Report</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128203;</text></svg>" />
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<div id="config-warning" class="banner warn" hidden>
+  <strong>Setup needed:</strong> paste your Google Apps Script Web App URL into
+  <code>config.js</code> (see <code>README.md</code> step 4), then reload this page.
+</div>
+
+<!-- ============ LOGIN ============ -->
+<main id="view-login" class="view narrow">
+  <div class="card">
+    <h1 class="brand">Daily Report</h1>
+    <p class="muted">Sign in to submit your daily field report.</p>
+    <form id="login-form" autocomplete="off">
+      <div class="field">
+        <label for="login-username">Username</label>
+        <input id="login-username" type="text" autocomplete="username" required />
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required />
+      </div>
+      <button id="login-btn" class="btn primary block" type="submit">Log in</button>
+    </form>
+  </div>
+</main>
+
+<!-- ============ FIRST-TIME SETUP ============ -->
+<main id="view-setup" class="view narrow" hidden>
+  <div class="card">
+    <h1 class="brand">Daily Report</h1>
+    <p class="muted">No users exist yet. Create the first <strong>admin</strong> account —
+      this account can add other users and change passwords later.</p>
+    <form id="setup-form" autocomplete="off">
+      <div class="field">
+        <label for="setup-username">Admin username</label>
+        <input id="setup-username" type="text" required pattern="[A-Za-z0-9._-]{3,30}"
+               title="3-30 characters: letters, numbers, . _ -" />
+      </div>
+      <div class="field">
+        <label for="setup-fullname">Full name</label>
+        <input id="setup-fullname" type="text" required />
+      </div>
+      <div class="field">
+        <label for="setup-password">Password</label>
+        <input id="setup-password" type="password" required minlength="6" />
+      </div>
+      <div class="field">
+        <label for="setup-password2">Confirm password</label>
+        <input id="setup-password2" type="password" required minlength="6" />
+      </div>
+      <button class="btn primary block" type="submit">Create admin account</button>
+    </form>
+  </div>
+</main>
+
+<!-- ============ APP ============ -->
+<div id="view-app" class="view" hidden>
+  <header class="app-header">
+    <div class="brand-sm">Daily Report</div>
+    <div class="user-chip">
+      <span id="app-username"></span>
+      <button id="logout-btn" class="btn ghost sm" type="button">Log out</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="report" type="button">New Report</button>
+    <button class="tab-btn" data-tab="history" type="button">My Reports</button>
+    <button class="tab-btn" data-tab="export" type="button">Export Excel</button>
+    <button class="tab-btn" data-tab="users" id="users-tab-btn" type="button" hidden>Users</button>
+  </nav>
+
+  <!-- New report -->
+  <section id="tab-report" class="tab-panel">
+    <div class="card">
+      <h2>New daily report</h2>
+      <form id="report-form" autocomplete="off">
+        <div class="field">
+          <label for="f-customer">Customer name *</label>
+          <input id="f-customer" type="text" required maxlength="120" />
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="f-contact">Contact number</label>
+            <input id="f-contact" type="tel" maxlength="20" />
+          </div>
+          <div class="field">
+            <label for="f-city">City</label>
+            <input id="f-city" type="text" maxlength="60" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-date">Date *</label>
+          <input id="f-date" type="date" required />
+          <p class="hint">Defaults to today — change it if you are filing for another day.</p>
+        </div>
+        <div class="field">
+          <label for="f-reason">Reason to visit *</label>
+          <textarea id="f-reason" rows="2" required maxlength="500"></textarea>
+        </div>
+        <div class="field">
+          <label for="f-remark">Remark</label>
+          <textarea id="f-remark" rows="2" maxlength="500"></textarea>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="f-start">Time start *</label>
+            <input id="f-start" type="time" required />
+          </div>
+          <div class="field">
+            <label for="f-end">Time end *</label>
+            <input id="f-end" type="time" required />
+          </div>
+        </div>
+        <button id="report-submit" class="btn primary block" type="submit">Save report</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- History -->
+  <section id="tab-history" class="tab-panel" hidden>
+    <div class="card">
+      <h2>Reports</h2>
+      <div class="filters">
+        <div class="field inline">
+          <label for="h-from">From</label>
+          <input id="h-from" type="date" />
+        </div>
+        <div class="field inline">
+          <label for="h-to">To</label>
+          <input id="h-to" type="date" />
+        </div>
+        <div class="field inline" id="h-scope-wrap" hidden>
+          <label for="h-scope">Show</label>
+          <select id="h-scope">
+            <option value="mine">My reports</option>
+            <option value="all">All users</option>
+          </select>
+        </div>
+        <button id="h-load" class="btn sm" type="button">Load</button>
+      </div>
+      <p id="history-count" class="muted"></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Customer</th><th>Contact</th><th>City</th>
+              <th>Reason</th><th>Remark</th><th>Time</th><th>By</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="history-body"></tbody>
+        </table>
+      </div>
+      <p id="history-empty" class="muted" hidden>No reports in this period.</p>
+    </div>
+  </section>
+
+  <!-- Export -->
+  <section id="tab-export" class="tab-panel" hidden>
+    <div class="card">
+      <h2>Export to Excel</h2>
+      <div class="field">
+        <label class="radio"><input type="radio" name="exp-mode" value="month" checked /> A whole month</label>
+        <input id="exp-month" type="month" />
+      </div>
+      <div class="field">
+        <label class="radio"><input type="radio" name="exp-mode" value="range" /> Custom date range</label>
+        <div class="grid2">
+          <input id="exp-from" type="date" aria-label="From date" />
+          <input id="exp-to" type="date" aria-label="To date" />
+        </div>
+      </div>
+      <div class="field" id="exp-scope-wrap" hidden>
+        <label for="exp-scope">Include</label>
+        <select id="exp-scope">
+          <option value="mine">My reports</option>
+          <option value="all">All users</option>
+        </select>
+      </div>
+      <button id="exp-btn" class="btn primary block" type="button">Download Excel (.xlsx)</button>
+      <p class="muted small">Tip: at month end, pick the month and download — or choose any custom range.</p>
+    </div>
+  </section>
+
+  <!-- Users (admin only) -->
+  <section id="tab-users" class="tab-panel" hidden>
+    <div class="card">
+      <h2>Add user</h2>
+      <form id="user-form" autocomplete="off">
+        <div class="grid2">
+          <div class="field">
+            <label for="u-username">Username *</label>
+            <input id="u-username" required pattern="[A-Za-z0-9._-]{3,30}"
+                   title="3-30 characters: letters, numbers, . _ -" />
+          </div>
+          <div class="field">
+            <label for="u-fullname">Full name *</label>
+            <input id="u-fullname" required />
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="u-password">Password *</label>
+            <input id="u-password" type="password" required minlength="6" />
+          </div>
+          <div class="field">
+            <label for="u-role">Role</label>
+            <select id="u-role">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn primary" type="submit">Add user</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Users</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th><th>Full name</th><th>Role</th>
+              <th>Active</th><th>New password</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="users-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

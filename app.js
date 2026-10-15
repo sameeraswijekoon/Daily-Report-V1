@@ -267,29 +267,27 @@
   }
 
   function renderHistory(reports, isAdmin) {
-    var tb = $('history-body');
+    var list = $('history-list');
     $('history-count').textContent = reports.length + (reports.length === 1 ? ' report' : ' reports');
     $('history-empty').hidden = reports.length > 0;
-    tb.innerHTML = reports.map(function (r) {
-      return '<tr>' +
-        '<td>' + esc(r.date) + '</td>' +
-        '<td>' + esc(r.customerName) + '</td>' +
-        '<td>' + esc(r.contactNumber) + '</td>' +
-        '<td>' + esc(r.city) + '</td>' +
-        '<td>' + esc(r.reasonToVisit) + '</td>' +
-        '<td>' + esc(r.remark) + '</td>' +
-        '<td>' + esc(r.timeStart) + ' - ' + esc(r.timeEnd) + '</td>' +
-        '<td>' + esc(r.username) + '</td>' +
-        '<td>' + (isAdmin
-          ? '<button class="btn danger sm" data-del="' + r.id + '" type="button">Delete</button>'
-          : '') + '</td>' +
-        '</tr>';
+    list.innerHTML = reports.map(function (r) {
+      var meta = [r.city, r.contactNumber].filter(function (x) { return x; }).join(' · ');
+      return '<article class="report-card">' +
+        '<div class="rc-top"><h3>' + esc(r.customerName) + '</h3>' +
+        '<span class="date-pill">' + esc(r.date) + '</span></div>' +
+        (meta ? '<div class="rc-meta">' + esc(meta) + '</div>' : '') +
+        '<div class="rc-row"><span>Reason to visit</span><p>' + esc(r.reasonToVisit) + '</p></div>' +
+        (r.remark ? '<div class="rc-row"><span>Remark</span><p>' + esc(r.remark) + '</p></div>' : '') +
+        '<div class="rc-foot"><span class="rc-time">' + esc(r.timeStart) + ' – ' + esc(r.timeEnd) + '</span>' +
+        '<span class="rc-by">by ' + esc(r.username) + '</span>' +
+        (isAdmin ? '<button class="btn danger sm" data-del="' + r.id + '" type="button">Delete</button>' : '') +
+        '</div></article>';
     }).join('');
   }
 
   $('h-load').addEventListener('click', loadHistory);
 
-  $('history-body').addEventListener('click', function (ev) {
+  $('history-list').addEventListener('click', function (ev) {
     var t = ev.target;
     var id = t && t.getAttribute ? t.getAttribute('data-del') : null;
     if (!id) return;
@@ -379,24 +377,25 @@
 
   function loadUsers() {
     api('listUsers', {}).then(function (data) {
-      var tb = $('users-body');
-      var users = data.users || [];
-      tb.innerHTML = users.map(function (u) {
-        var un = esc(u.username);
-        return '<tr>' +
-          '<td>' + un + '</td>' +
-          '<td>' + esc(u.fullName) + '</td>' +
-          '<td>' + esc(u.role) + '</td>' +
-          '<td><input type="checkbox" data-active="' + un + '"' +
-            (u.active ? ' checked' : '') + ' aria-label="Active" /></td>' +
-          '<td><input type="password" class="pw-input" data-pw="' + un + '"' +
-            ' placeholder="New password" minlength="6" /></td>' +
-          '<td><button class="btn sm" data-setpw="' + un + '" type="button">Update</button></td>' +
-          '</tr>';
-      }).join('');
+      renderUsers(data.users || []);
     }).catch(function (err) {
       toast(err.message, false);
     });
+  }
+
+  function renderUsers(users) {
+    $('users-list').innerHTML = users.map(function (u) {
+      var un = esc(u.username);
+      return '<article class="user-card">' +
+        '<div class="uc-top"><div><h3>' + un + '</h3><p class="muted">' + esc(u.fullName) + '</p></div>' +
+        '<span class="role-pill' + (u.role === 'admin' ? ' admin' : '') + '">' + esc(u.role) + '</span></div>' +
+        '<label class="uc-active"><input type="checkbox" data-active="' + un + '"' +
+        (u.active ? ' checked' : '') + ' /> Active</label>' +
+        '<div class="uc-pw"><input type="password" data-pw="' + un + '"' +
+        ' placeholder="New password" minlength="6" aria-label="New password for ' + un + '" />' +
+        '<button class="btn primary sm" data-setpw="' + un + '" type="button">Update</button></div>' +
+        '</article>';
+    }).join('');
   }
 
   $('user-form').addEventListener('submit', function (ev) {
@@ -419,7 +418,7 @@
     });
   });
 
-  $('users-body').addEventListener('change', function (ev) {
+  $('users-list').addEventListener('change', function (ev) {
     var t = ev.target;
     var un = t && t.getAttribute ? t.getAttribute('data-active') : null;
     if (!un) return;
@@ -442,7 +441,7 @@
     });
   });
 
-  $('users-body').addEventListener('click', function (ev) {
+  $('users-list').addEventListener('click', function (ev) {
     var t = ev.target;
     var un = t && t.getAttribute ? t.getAttribute('data-setpw') : null;
     if (!un) return;
@@ -459,6 +458,15 @@
       toast(err.message, false);
     });
   });
+
+  /* auto-select the matching export mode when its input is tapped */
+  function checkExpMode(value) {
+    var radio = document.querySelector('input[name="exp-mode"][value="' + value + '"]');
+    if (radio) radio.checked = true;
+  }
+  $('exp-month').addEventListener('focus', function () { checkExpMode('month'); });
+  $('exp-from').addEventListener('focus', function () { checkExpMode('range'); });
+  $('exp-to').addEventListener('focus', function () { checkExpMode('range'); });
 
   /* ---------------- go ---------------- */
 

@@ -16,6 +16,7 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;

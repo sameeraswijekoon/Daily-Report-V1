@@ -81,6 +81,10 @@ This repo is a static site — enable **GitHub Pages**:
 
 * **New Report** — fill Customer name, Contact number, City, Date
   (auto-set to today, changeable), Reason to visit, Remark, Time start/end → Save.
+  Typing a customer name suggests matches from the shared customer directory
+  and auto-fills number & city; unknown names offer a one-tap "add as new customer".
+* **Customers** — every user can add customers (name, contact number, city);
+  the directory is shared across the team. Admins can delete customers.
 * **My Reports** — view/filter your submitted reports by date.
 * **Export Excel** — pick a whole month (e.g. at month end) or a custom date
   range → **Download Excel (.xlsx)**.
@@ -104,6 +108,11 @@ This repo is a static site — enable **GitHub Pages**:
 
 | Timestamp | Username | Date | CustomerName | ContactNumber | City | ReasonToVisit | Remark | TimeStart | TimeEnd |
 |---|---|---|---|---|---|---|---|---|---|
+
+`Customers` tab (shared directory):
+
+| Name | ContactNumber | City | CreatedBy | CreatedAt |
+|---|---|---|---|---||
 
 You can read (and even edit) the data directly in the sheet — the app picks it up.
 

@@ -119,6 +119,7 @@
     window.scrollTo(0, 0);
     if (name === 'history') loadHistory();
     if (name === 'export') updateExportCount();
+    if (name === 'customers') loadCustomers();
     var s = getSession();
     if (name === 'users' && s && s.role === 'admin') loadUsers();
   }
@@ -174,6 +175,7 @@
     $('exp-from').value = firstOfMonth();
     $('exp-to').value = todayColombo();
     resetReportForm();
+    ensureCustomers(); // preload directory so name suggestions are instant
   }
 
   /* ---------------- login / setup / logout ---------------- */
@@ -568,6 +570,145 @@
     }).catch(function (err) {
       toast(err.message, false);
     });
+  });
+
+  /* ---------------- customers (shared directory) ---------------- */
+  var customerCache = [];
+  var customersLoaded = false;
+
+  function ensureCustomers() {
+    if (customersLoaded) return Promise.resolve(customerCache);
+    return api('listCustomers', {}).then(function (data) {
+      customerCache = data.customers || [];
+      customersLoaded = true;
+      return customerCache;
+    }).catch(function () { return customerCache; });
+  }
+
+  function loadCustomers() {
+    api('listCustomers', {}).then(function (data) {
+      customerCache = data.customers || [];
+      customersLoaded = true;
+      renderCustomers();
+    }).catch(function (err) {
+      toast(err.message, false);
+    });
+  }
+
+  function renderCustomers() {
+    var s = getSession();
+    var isAdmin = !!(s && s.role === 'admin');
+    var q = $('cust-search').value.trim().toLowerCase();
+    var list = customerCache.filter(function (c) {
+      return !q || (c.name + ' ' + c.city + ' ' + c.contactNumber).toLowerCase().indexOf(q) !== -1;
+    });
+    $('customers-empty').hidden = list.length > 0;
+    $('customers-list').innerHTML = list.map(function (c) {
+      var meta = [c.contactNumber, c.city].filter(function (x) { return x; }).join(' · ');
+      return '<article class="customer-card"><div class="cc-info"><h3>' + esc(c.name) + '</h3>' +
+        (meta ? '<div class="cc-meta">' + esc(meta) + '</div>' : '') + '</div>' +
+        (isAdmin ? '<button class="btn danger sm" data-delcust="' + c.id + '" type="button">Delete</button>' : '') +
+        '</article>';
+    }).join('');
+  }
+
+  $('customer-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var payload = {
+      name: $('c-name').value.trim(),
+      contactNumber: $('c-contact').value.trim(),
+      city: $('c-city').value.trim()
+    };
+    if (!payload.name) { toast('Enter a customer name.', false); return; }
+    api('addCustomer', payload).then(function (data) {
+      toast(data.updated ? 'Customer updated.' : 'Customer added.', true);
+      $('customer-form').reset();
+      customersLoaded = false;
+      loadCustomers();
+    }).catch(function (err) {
+      toast(err.message, false);
+    });
+  });
+
+  $('cust-search').addEventListener('input', renderCustomers);
+
+  $('customers-list').addEventListener('click', function (ev) {
+    var t = ev.target;
+    var id = t && t.getAttribute ? t.getAttribute('data-delcust') : null;
+    if (!id) return;
+    if (!confirm('Delete this customer? This cannot be undone.')) return;
+    api('deleteCustomer', { id: Number(id) }).then(function () {
+      toast('Customer deleted.', true);
+      customersLoaded = false;
+      loadCustomers();
+    }).catch(function (err) {
+      toast(err.message, false);
+    });
+  });
+
+  /* ---- autocomplete on the report form ---- */
+  function hideSuggestions() {
+    var el = $('cust-suggest');
+    if (el) el.hidden = true;
+  }
+
+  function showSuggestions() {
+    var input = $('f-customer');
+    var list = $('cust-suggest');
+    var q = input.value.trim().toLowerCase();
+    if (!q) { list.hidden = true; return; }
+    var matches = customerCache.filter(function (c) {
+      return c.name.toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 7);
+    var exact = customerCache.some(function (c) { return c.name.toLowerCase() === q; });
+    list._matches = matches;
+    var html = matches.map(function (c, i) {
+      return '<div class="suggest-item" data-idx="' + i + '"><span class="s-name">' + esc(c.name) + '</span>' +
+        (c.city ? '<span class="s-city">' + esc(c.city) + '</span>' : '') + '</div>';
+    }).join('');
+    if (!exact) {
+      html += '<div class="suggest-item add-new" data-addnew="1"><span><span class="s-plus">+</span>Add "' +
+        esc(input.value.trim()) + '" as new customer</span></div>';
+    }
+    if (!html) { list.hidden = true; return; }
+    list.innerHTML = html;
+    list.hidden = false;
+  }
+
+  function selectCustomer(c) {
+    $('f-customer').value = c.name;
+    $('f-contact').value = c.contactNumber || '';
+    $('f-city').value = c.city || '';
+    hideSuggestions();
+  }
+
+  $('f-customer').addEventListener('focus', function () {
+    ensureCustomers().then(showSuggestions);
+  });
+  $('f-customer').addEventListener('input', function () {
+    ensureCustomers().then(showSuggestions);
+  });
+  $('f-customer').addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') hideSuggestions();
+  });
+  $('f-customer').addEventListener('blur', function () {
+    setTimeout(hideSuggestions, 160); // let a tap on a suggestion land first
+  });
+  $('cust-suggest').addEventListener('mousedown', function (ev) {
+    var t = ev.target && ev.target.closest ? ev.target.closest('.suggest-item') : null;
+    if (!t) return;
+    ev.preventDefault(); // keep focus so blur doesn't hide the list first
+    if (t.getAttribute('data-addnew')) {
+      var name = $('f-customer').value.trim();
+      hideSuggestions();
+      showTab('customers');
+      $('c-name').value = name;
+      setTimeout(function () { $('c-contact').focus(); }, 120);
+      return;
+    }
+    var idx = Number(t.getAttribute('data-idx'));
+    var c = $('cust-suggest')._matches && $('cust-suggest')._matches[idx];
+    if (c) selectCustomer(c);
   });
 
   /* ---------------- go ---------------- */

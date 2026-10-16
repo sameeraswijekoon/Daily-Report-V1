@@ -102,7 +102,11 @@
       <form id="report-form" autocomplete="off">
         <div class="field">
           <label for="f-customer">Customer name *</label>
-          <input id="f-customer" type="text" required maxlength="120" placeholder="e.g. SL Police" />
+          <div class="autocomplete">
+            <input id="f-customer" type="text" required maxlength="120" placeholder="Start typing a customer name…" autocomplete="off" />
+            <div id="cust-suggest" class="suggest-list" hidden></div>
+          </div>
+          <p class="hint">Suggestions come from your customer directory — picking one fills number &amp; city.</p>
         </div>
         <div class="grid2">
           <div class="field">
@@ -233,6 +237,43 @@
     </div>
   </section>
 
+  <!-- Customers (shared directory, all users) -->
+  <section id="tab-customers" class="tab-panel" hidden>
+    <div class="card">
+      <h2>Add customer</h2>
+      <form id="customer-form" autocomplete="off">
+        <div class="field">
+          <label for="c-name">Customer name *</label>
+          <input id="c-name" type="text" required maxlength="120" placeholder="e.g. SL Police" />
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="c-contact">Contact number</label>
+            <input id="c-contact" type="tel" inputmode="tel" maxlength="20" placeholder="077…" />
+          </div>
+          <div class="field">
+            <label for="c-city">City</label>
+            <input id="c-city" type="text" maxlength="60" placeholder="Colombo" />
+          </div>
+        </div>
+        <button class="btn primary block" type="submit">Save customer</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Customers</h2>
+      <div class="field search-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="cust-search" type="text" placeholder="Search customers…" aria-label="Search customers" />
+      </div>
+      <div id="customers-list"></div>
+      <div id="customers-empty" class="empty-state" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5M16 4.6a3.5 3.5 0 0 1 0 6.8M17.5 14.2c2.1.8 3.5 2.8 3.5 5.3"/></svg>
+        <h3>No customers yet</h3>
+        <p class="muted">Add your first customer above — they'll be suggested when filing reports.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- Users (admin only) -->
   <section id="tab-users" class="tab-panel" hidden>
     <div class="card">
@@ -284,6 +325,10 @@
     <button class="tab-btn" data-tab="export" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>
       <span>Export</span>
+    </button>
+    <button class="tab-btn" data-tab="customers" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M8 15h4"/></svg>
+      <span>Customers</span>
     </button>
     <button class="tab-btn" data-tab="users" id="users-tab-btn" type="button" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5M16 4.6a3.5 3.5 0 0 1 0 6.8M17.5 14.2c2.1.8 3.5 2.8 3.5 5.3"/></svg>

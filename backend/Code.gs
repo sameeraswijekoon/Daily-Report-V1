@@ -24,10 +24,12 @@
 
 var SHEET_USERS = 'Users';
 var SHEET_REPORTS = 'Reports';
+var SHEET_CUSTOMERS = 'Customers';
 
 var USER_HEADERS = ['Username', 'PasswordHash', 'FullName', 'Role', 'Active', 'CreatedAt'];
 var REPORT_HEADERS = ['Timestamp', 'Username', 'Date', 'CustomerName', 'ContactNumber',
                       'City', 'ReasonToVisit', 'Remark', 'TimeStart', 'TimeEnd'];
+var CUSTOMER_HEADERS = ['Name', 'ContactNumber', 'City', 'CreatedBy', 'CreatedAt'];
 
 /* ---------------- helpers ---------------- */
 
@@ -149,6 +151,9 @@ function doPost(e) {
     if (action === 'setPassword') return authed_(body, true, setPassword_);
     if (action === 'setActive') return authed_(body, true, setActive_);
     if (action === 'deleteReport') return authed_(body, true, deleteReport_);
+    if (action === 'listCustomers') return authed_(body, false, listCustomers_);
+    if (action === 'addCustomer') return authed_(body, false, addCustomer_);
+    if (action === 'deleteCustomer') return authed_(body, true, deleteCustomer_);
 
     return out_({ ok: false, error: 'Unknown action: ' + action });
   } catch (err) {
@@ -254,6 +259,66 @@ function deleteReport_(body, admin) {
   if (!id || id < 2) return out_({ ok: false, error: 'Invalid report id' });
   var sh = getSheet_(SHEET_REPORTS, REPORT_HEADERS);
   if (id > sh.getLastRow()) return out_({ ok: false, error: 'Report not found' });
+  sh.deleteRow(id);
+  return out_({ ok: true });
+}
+
+/* ---------------- customers: shared directory ---------------- */
+
+function findCustomer_(name) {
+  var key = String(name || '').trim().toLowerCase();
+  if (!key) return null;
+  var all = rows_(SHEET_CUSTOMERS, CUSTOMER_HEADERS);
+  for (var i = 0; i < all.length; i++) {
+    if (String(all[i].Name || '').trim().toLowerCase() === key) return all[i];
+  }
+  return null;
+}
+
+function listCustomers_(body, user) {
+  var all = rows_(SHEET_CUSTOMERS, CUSTOMER_HEADERS);
+  var out = [];
+  for (var i = 0; i < all.length; i++) {
+    var c = all[i];
+    var name = String(c.Name || '').trim();
+    if (!name) continue;
+    out.push({
+      id: c._row,
+      name: name,
+      contactNumber: String(c.ContactNumber || ''),
+      city: String(c.City || ''),
+      createdBy: String(c.CreatedBy || '')
+    });
+  }
+  out.sort(function (a, b) {
+    var x = a.name.toLowerCase(), y = b.name.toLowerCase();
+    return x < y ? -1 : (x > y ? 1 : 0);
+  });
+  return out_({ ok: true, customers: out });
+}
+
+function addCustomer_(body, user) {
+  var name = String(body.name || '').trim();
+  var contactNumber = String(body.contactNumber || '').trim();
+  var city = String(body.city || '').trim();
+  if (!name) return out_({ ok: false, error: 'Customer name required' });
+  var sh = getSheet_(SHEET_CUSTOMERS, CUSTOMER_HEADERS);
+  var existing = findCustomer_(name);
+  var contactVal = contactNumber ? "'" + contactNumber : ''; // keep leading zeros
+  if (existing) {
+    sh.getRange(existing._row, 2).setValue(contactVal);
+    sh.getRange(existing._row, 3).setValue(city);
+    return out_({ ok: true, updated: true });
+  }
+  sh.appendRow([name, contactVal, city, user.Username, new Date().toISOString()]);
+  return out_({ ok: true, created: true });
+}
+
+function deleteCustomer_(body, admin) {
+  var id = Number(body.id);
+  if (!id || id < 2) return out_({ ok: false, error: 'Invalid customer id' });
+  var sh = getSheet_(SHEET_CUSTOMERS, CUSTOMER_HEADERS);
+  if (id > sh.getLastRow()) return out_({ ok: false, error: 'Customer not found' });
   sh.deleteRow(id);
   return out_({ ok: true });
 }

@@ -6,8 +6,11 @@
 <meta name="theme-color" content="#0e7490" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="description" content="Daily field visit reports" />
 <title>Daily Report</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128203;</text></svg>" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
 <link rel="stylesheet" href="styles.css" />
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
@@ -15,7 +18,7 @@
 
 <div id="config-warning" class="banner warn" hidden>
   <strong>Setup needed:</strong> paste your Google Apps Script Web App URL into
-  <code>config.js</code> (see <code>README.md</code> step 4), then reload this page.
+  <code>config.js</code> (see <code>README.md</code>), then reload this page.
 </div>
 
 <!-- ============ LOGIN ============ -->
@@ -29,11 +32,16 @@
     <form id="login-form" autocomplete="off">
       <div class="field">
         <label for="login-username">Username</label>
-        <input id="login-username" type="text" autocomplete="username" required />
+        <input id="login-username" type="text" autocomplete="username" placeholder="Your username" required />
       </div>
       <div class="field">
         <label for="login-password">Password</label>
-        <input id="login-password" type="password" autocomplete="current-password" required />
+        <div class="pw-wrap">
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Your password" required />
+          <button type="button" id="pw-toggle" class="pw-toggle" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
       </div>
       <button id="login-btn" class="btn primary block" type="submit">Log in</button>
     </form>
@@ -53,19 +61,21 @@
       <div class="field">
         <label for="setup-username">Admin username</label>
         <input id="setup-username" type="text" required pattern="[A-Za-z0-9._-]{3,30}"
-               title="3-30 characters: letters, numbers, . _ -" />
+               title="3-30 characters: letters, numbers, . _ -" placeholder="e.g. sameera" />
       </div>
       <div class="field">
         <label for="setup-fullname">Full name</label>
-        <input id="setup-fullname" type="text" required />
+        <input id="setup-fullname" type="text" required placeholder="e.g. Sameera Wijekoon" />
       </div>
-      <div class="field">
-        <label for="setup-password">Password</label>
-        <input id="setup-password" type="password" required minlength="6" />
-      </div>
-      <div class="field">
-        <label for="setup-password2">Confirm password</label>
-        <input id="setup-password2" type="password" required minlength="6" />
+      <div class="grid2">
+        <div class="field">
+          <label for="setup-password">Password</label>
+          <input id="setup-password" type="password" required minlength="6" />
+        </div>
+        <div class="field">
+          <label for="setup-password2">Confirm</label>
+          <input id="setup-password2" type="password" required minlength="6" />
+        </div>
       </div>
       <button class="btn primary block" type="submit">Create admin account</button>
     </form>
@@ -87,7 +97,7 @@
 
   <!-- New report -->
   <section id="tab-report" class="tab-panel">
-    <div class="card">
+    <div class="card" id="report-form-wrap">
       <h2>New daily report</h2>
       <form id="report-form" autocomplete="off">
         <div class="field">
@@ -97,7 +107,7 @@
         <div class="grid2">
           <div class="field">
             <label for="f-contact">Contact number</label>
-            <input id="f-contact" type="tel" maxlength="20" placeholder="077…" />
+            <input id="f-contact" type="tel" inputmode="tel" maxlength="20" placeholder="077…" />
           </div>
           <div class="field">
             <label for="f-city">City</label>
@@ -107,7 +117,7 @@
         <div class="field">
           <label for="f-date">Date *</label>
           <input id="f-date" type="date" required />
-          <p class="hint">Defaults to today — change it if you are filing for another day.</p>
+          <p class="hint">Defaults to today — change it if filing for another day.</p>
         </div>
         <div class="field">
           <label for="f-reason">Reason to visit *</label>
@@ -120,11 +130,17 @@
         <div class="grid2">
           <div class="field">
             <label for="f-start">Time start *</label>
-            <input id="f-start" type="time" required />
+            <div class="time-row">
+              <input id="f-start" type="time" required />
+              <button type="button" class="btn sm" id="now-start">Now</button>
+            </div>
           </div>
           <div class="field">
             <label for="f-end">Time end *</label>
-            <input id="f-end" type="time" required />
+            <div class="time-row">
+              <input id="f-end" type="time" required />
+              <button type="button" class="btn sm" id="now-end">Now</button>
+            </div>
           </div>
         </div>
         <div class="sticky-cta">
@@ -132,12 +148,35 @@
         </div>
       </form>
     </div>
+    <div class="card success-card" id="report-success" hidden>
+      <div class="success-check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+      </div>
+      <h2>Report saved</h2>
+      <p class="muted" id="success-sub"></p>
+      <button id="success-another" class="btn primary block" type="button">Add another report</button>
+      <button id="success-view" class="btn block" type="button">View my reports</button>
+    </div>
   </section>
 
   <!-- History -->
   <section id="tab-history" class="tab-panel" hidden>
+    <div class="stats-row">
+      <div class="stat">
+        <span class="stat-num" id="stat-reports">–</span>
+        <span class="stat-label">Reports</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num" id="stat-hours">–</span>
+        <span class="stat-label">Hours in field</span>
+      </div>
+    </div>
     <div class="card">
       <h2>Reports</h2>
+      <div class="field search-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="h-search" type="text" placeholder="Search customer, city, reason…" aria-label="Search reports" />
+      </div>
       <div class="filters">
         <div class="field">
           <label for="h-from">From</label>
@@ -156,9 +195,13 @@
         </div>
         <button id="h-load" class="btn sm" type="button">Load reports</button>
       </div>
-      <p id="history-count" class="muted small"></p>
       <div id="history-list"></div>
-      <p id="history-empty" class="muted empty" hidden>No reports in this period.</p>
+      <div id="history-empty" class="empty-state" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.5h6V4M9 11h6M9 15h4"/></svg>
+        <h3>No reports found</h3>
+        <p class="muted">Try a different date range, or add your first report.</p>
+        <button id="empty-add-btn" class="btn primary sm" type="button">New report</button>
+      </div>
     </div>
   </section>
 
@@ -185,7 +228,8 @@
         </select>
       </div>
       <button id="exp-btn" class="btn primary block" type="button">Download Excel (.xlsx)</button>
-      <p class="muted small" style="margin-top:12px">Tip: at month end, pick the month and download — or choose any custom range.</p>
+      <p class="muted small center" id="exp-count" style="margin-top:12px"></p>
+      <p class="muted small center">Tip: at month end, pick the month and download — or choose any custom range.</p>
     </div>
   </section>
 
@@ -198,17 +242,17 @@
           <div class="field">
             <label for="u-username">Username *</label>
             <input id="u-username" required pattern="[A-Za-z0-9._-]{3,30}"
-                   title="3-30 characters: letters, numbers, . _ -" />
+                   title="3-30 characters: letters, numbers, . _ -" placeholder="e.g. humaid" />
           </div>
           <div class="field">
             <label for="u-fullname">Full name *</label>
-            <input id="u-fullname" required />
+            <input id="u-fullname" required placeholder="e.g. Humaid Ali" />
           </div>
         </div>
         <div class="grid2">
           <div class="field">
             <label for="u-password">Password *</label>
-            <input id="u-password" type="password" required minlength="6" />
+            <input id="u-password" type="password" required minlength="6" placeholder="Min. 6 characters" />
           </div>
           <div class="field">
             <label for="u-role">Role</label>
@@ -228,7 +272,7 @@
   </section>
 
   <!-- bottom tab bar -->
-  <nav class="bottom-nav">
+  <nav class="bottom-nav" aria-label="Main">
     <button class="tab-btn active" data-tab="report" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
       <span>New</span>

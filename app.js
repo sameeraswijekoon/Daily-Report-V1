@@ -1,4 +1,4 @@
-/* Daily Report — frontend logic (static site + Google Apps Script backend) */
+/* Daily Report — frontend (rewritten UI, same backend API) */
 (function () {
   'use strict';
 
@@ -25,8 +25,29 @@
     }
   }
 
+  function nowColombo() {
+    try {
+      return new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      var d = new Date();
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+  }
+
   function firstOfMonth() { return todayColombo().slice(0, 7) + '-01'; }
 
+  function minutesBetween(a, b) {
+    // "HH:MM" -> minutes; returns 0 when unparseable or end <= start
+    function toMin(t) {
+      var m = /^(\d{1,2}):(\d{2})/.exec(t || '');
+      return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+    }
+    var s = toMin(a), e = toMin(b);
+    if (s == null || e == null || e <= s) return 0;
+    return e - s;
+  }
+
+  /* ---------------- toast ---------------- */
   var toastTimer = null;
   function toast(msg, ok) {
     var t = $('toast');
@@ -36,6 +57,7 @@
     toastTimer = setTimeout(function () { t.className = 'toast'; }, 3500);
   }
 
+  /* ---------------- session & crypto ---------------- */
   function getSession() {
     try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
     catch (e) { return null; }
@@ -52,6 +74,7 @@
     });
   }
 
+  /* ---------------- api ---------------- */
   function api(action, payload) {
     payload = payload || {};
     var s = getSession();
@@ -72,12 +95,13 @@
       });
     }).catch(function (err) {
       if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
-        throw new Error('Cannot reach the server. Check your connection and the Web App URL in config.js.');
+        throw new Error('Cannot reach the server. Check your connection and try again.');
       }
       throw err;
     });
   }
 
+  /* ---------------- views & tabs ---------------- */
   function show(id) {
     ['view-login', 'view-setup', 'view-app'].forEach(function (v) { $(v).hidden = v !== id; });
     window.scrollTo(0, 0);
@@ -92,10 +116,14 @@
     for (var j = 0; j < panels.length; j++) {
       panels[j].hidden = panels[j].id !== 'tab-' + name;
     }
+    window.scrollTo(0, 0);
+    if (name === 'history') loadHistory();
+    if (name === 'export') updateExportCount();
+    var s = getSession();
+    if (name === 'users' && s && s.role === 'admin') loadUsers();
   }
 
   /* ---------------- boot ---------------- */
-
   function boot() {
     if (!CONFIGURED) {
       $('config-warning').hidden = false;
@@ -141,15 +169,14 @@
     if (!$('f-date').value) $('f-date').value = todayColombo();
     $('h-from').value = firstOfMonth();
     $('h-to').value = todayColombo();
+    $('h-search').value = '';
     $('exp-month').value = todayColombo().slice(0, 7);
     $('exp-from').value = firstOfMonth();
     $('exp-to').value = todayColombo();
-    loadHistory();
-    if (isAdmin) loadUsers();
+    resetReportForm();
   }
 
   /* ---------------- login / setup / logout ---------------- */
-
   $('login-form').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var username = $('login-username').value.trim();
@@ -174,6 +201,14 @@
     }).then(function () {
       btn.disabled = false;
     });
+  });
+
+  $('pw-toggle').addEventListener('click', function () {
+    var input = $('login-password');
+    var showPw = input.type === 'password';
+    input.type = showPw ? 'text' : 'password';
+    $('pw-toggle').classList.toggle('active', showPw);
+    $('pw-toggle').setAttribute('aria-label', showPw ? 'Hide password' : 'Show password');
   });
 
   $('setup-form').addEventListener('submit', function (ev) {
@@ -205,7 +240,6 @@
   });
 
   /* ---------------- tabs ---------------- */
-
   var tabBtns = document.querySelectorAll('.tab-btn');
   for (var ti = 0; ti < tabBtns.length; ti++) {
     (function (b) {
@@ -214,6 +248,15 @@
   }
 
   /* ---------------- new report ---------------- */
+  function resetReportForm() {
+    $('report-form').reset();
+    $('f-date').value = todayColombo();
+    $('report-form-wrap').hidden = false;
+    $('report-success').hidden = true;
+  }
+
+  $('now-start').addEventListener('click', function () { $('f-start').value = nowColombo(); });
+  $('now-end').addEventListener('click', function () { $('f-end').value = nowColombo(); });
 
   $('report-form').addEventListener('submit', function (ev) {
     ev.preventDefault();
@@ -235,10 +278,11 @@
     var btn = $('report-submit');
     btn.disabled = true;
     api('saveReport', payload).then(function () {
-      toast('Report saved.', true);
-      $('report-form').reset();
-      $('f-date').value = todayColombo();
-      loadHistory();
+      $('success-sub').textContent = payload.customerName + ' · ' + payload.date +
+        ' · ' + payload.timeStart + ' – ' + payload.timeEnd;
+      $('report-form-wrap').hidden = true;
+      $('report-success').hidden = false;
+      window.scrollTo(0, 0);
     }).catch(function (err) {
       toast(err.message, false);
     }).then(function () {
@@ -246,7 +290,15 @@
     });
   });
 
+  $('success-another').addEventListener('click', function () {
+    resetReportForm();
+    window.scrollTo(0, 0);
+    setTimeout(function () { $('f-customer').focus(); }, 100);
+  });
+  $('success-view').addEventListener('click', function () { showTab('history'); });
+
   /* ---------------- history ---------------- */
+  var cachedReports = [];
 
   function currentScope(selectId) {
     var s = getSession();
@@ -254,21 +306,44 @@
     return 'mine';
   }
 
+  function skeletonCards(n) {
+    var html = '';
+    for (var i = 0; i < n; i++) {
+      html += '<div class="skeleton-card"><div class="sk sk-title"></div>' +
+        '<div class="sk sk-line"></div><div class="sk sk-line short"></div></div>';
+    }
+    return html;
+  }
+
   function loadHistory() {
     var from = $('h-from').value;
     var to = $('h-to').value;
     var scope = currentScope('h-scope');
-    var s = getSession();
+    $('history-list').innerHTML = skeletonCards(3);
+    $('history-empty').hidden = true;
     api('listReports', { from: from, to: to, scope: scope }).then(function (data) {
-      renderHistory(data.reports || [], !!(s && s.role === 'admin'));
+      cachedReports = data.reports || [];
+      renderHistory();
     }).catch(function (err) {
+      $('history-list').innerHTML = '';
       toast(err.message, false);
     });
   }
 
-  function renderHistory(reports, isAdmin) {
+  function filteredReports() {
+    var q = $('h-search').value.trim().toLowerCase();
+    if (!q) return cachedReports;
+    return cachedReports.filter(function (r) {
+      return (r.customerName + ' ' + r.city + ' ' + r.reasonToVisit + ' ' +
+              r.remark + ' ' + r.username).toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function renderHistory() {
+    var s = getSession();
+    var isAdmin = !!(s && s.role === 'admin');
+    var reports = filteredReports();
     var list = $('history-list');
-    $('history-count').textContent = reports.length + (reports.length === 1 ? ' report' : ' reports');
     $('history-empty').hidden = reports.length > 0;
     list.innerHTML = reports.map(function (r) {
       var meta = [r.city, r.contactNumber].filter(function (x) { return x; }).join(' · ');
@@ -283,9 +358,16 @@
         (isAdmin ? '<button class="btn danger sm" data-del="' + r.id + '" type="button">Delete</button>' : '') +
         '</div></article>';
     }).join('');
+    // stats for the loaded period
+    var mins = 0;
+    cachedReports.forEach(function (r) { mins += minutesBetween(r.timeStart, r.timeEnd); });
+    $('stat-reports').textContent = cachedReports.length;
+    $('stat-hours').textContent = (Math.round(mins / 6) / 10).toString();
   }
 
   $('h-load').addEventListener('click', loadHistory);
+  $('h-search').addEventListener('input', renderHistory);
+  $('empty-add-btn').addEventListener('click', function () { showTab('report'); });
 
   $('history-list').addEventListener('click', function (ev) {
     var t = ev.target;
@@ -301,7 +383,6 @@
   });
 
   /* ---------------- export to Excel ---------------- */
-
   function exportRange() {
     var modeEl = document.querySelector('input[name="exp-mode"]:checked');
     var mode = modeEl ? modeEl.value : 'month';
@@ -324,6 +405,37 @@
     }
     return { from: from, to: to, label: label };
   }
+
+  function updateExportCount() {
+    var range = exportRange();
+    if (!range) { $('exp-count').textContent = ''; return; }
+    var scope = currentScope('exp-scope');
+    $('exp-count').textContent = 'Counting…';
+    api('listReports', { from: range.from, to: range.to, scope: scope }).then(function (data) {
+      var n = (data.reports || []).length;
+      $('exp-count').textContent = n === 0
+        ? 'No reports in this period.'
+        : n + (n === 1 ? ' report' : ' reports') + ' ready to download.';
+    }).catch(function () {
+      $('exp-count').textContent = '';
+    });
+  }
+
+  ['exp-month', 'exp-from', 'exp-to', 'exp-scope'].forEach(function (id) {
+    $(id).addEventListener('change', function () {
+      var map = { 'exp-month': 'month', 'exp-from': 'range', 'exp-to': 'range' };
+      if (map[id]) checkExpMode(map[id]);
+      updateExportCount();
+    });
+  });
+
+  function checkExpMode(value) {
+    var radio = document.querySelector('input[name="exp-mode"][value="' + value + '"]');
+    if (radio) radio.checked = true;
+  }
+  $('exp-month').addEventListener('focus', function () { checkExpMode('month'); });
+  $('exp-from').addEventListener('focus', function () { checkExpMode('range'); });
+  $('exp-to').addEventListener('focus', function () { checkExpMode('range'); });
 
   $('exp-btn').addEventListener('click', function () {
     if (typeof XLSX === 'undefined') {
@@ -374,7 +486,6 @@
   }
 
   /* ---------------- admin: users ---------------- */
-
   function loadUsers() {
     api('listUsers', {}).then(function (data) {
       renderUsers(data.users || []);
@@ -459,17 +570,7 @@
     });
   });
 
-  /* auto-select the matching export mode when its input is tapped */
-  function checkExpMode(value) {
-    var radio = document.querySelector('input[name="exp-mode"][value="' + value + '"]');
-    if (radio) radio.checked = true;
-  }
-  $('exp-month').addEventListener('focus', function () { checkExpMode('month'); });
-  $('exp-from').addEventListener('focus', function () { checkExpMode('range'); });
-  $('exp-to').addEventListener('focus', function () { checkExpMode('range'); });
-
   /* ---------------- go ---------------- */
-
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {
